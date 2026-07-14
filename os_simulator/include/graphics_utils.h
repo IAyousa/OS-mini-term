@@ -4,7 +4,7 @@
 
 // ===== 窗口常量（全局统一） =====
 constexpr int W_WIDTH = 1000;
-constexpr int W_HEIGHT = 700;
+constexpr int W_HEIGHT = 800;
 
 // ===== 工具函数 =====
 

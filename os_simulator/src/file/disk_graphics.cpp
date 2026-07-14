@@ -73,7 +73,7 @@ void drawChart(const ScheduleResult& res, const std::vector<int>& reqs,
         int x = ChartConfig::ML + i * cw / (n - 1);
         line(x, ChartConfig::MT + ch, x, ChartConfig::MT + ch + 5);
         if (i % 5 == 0 || i == n - 1 || i == 0)
-            drawText(x - 10, ChartConfig::MT + ch + 12, std::to_string(i), 14, ChartConfig::TXT);
+            drawText(x - 10, ChartConfig::MT + ch + 6, std::to_string(i), 12, ChartConfig::TXT);
     }
 
     // 轨迹线（动画）
@@ -106,26 +106,26 @@ void drawChart(const ScheduleResult& res, const std::vector<int>& reqs,
     setfillcolor(ChartConfig::INFO);
     setlinecolor(ChartConfig::AXIS);
     setlinestyle(PS_SOLID, 1);
-    int iy = W_HEIGHT - 55;
-    rectangle(ChartConfig::ML, iy, ChartConfig::ML + cw, iy + 40);
+    int iy = W_HEIGHT - 40;
+    rectangle(ChartConfig::ML, iy, ChartConfig::ML + cw, iy + 34);
 
     std::stringstream ss;
     ss << "总寻道: " << res.total_seek << "  ";
-    drawText(ChartConfig::ML + 20, iy + 10, ss.str(), 16, ChartConfig::TXT);
+    drawText(ChartConfig::ML + 20, iy + 8, ss.str(), 14, ChartConfig::TXT);
 
     ss.str("");
     ss << std::fixed << std::setprecision(2) << "平均寻道: " << res.avg_seek << "  ";
-    drawText(ChartConfig::ML + 220, iy + 10, ss.str(), 16, ChartConfig::TXT);
+    drawText(ChartConfig::ML + 200, iy + 8, ss.str(), 14, ChartConfig::TXT);
 
     ss.str("");
     ss << "请求数: " << reqs.size() << "  ";
-    drawText(ChartConfig::ML + 460, iy + 10, ss.str(), 16, ChartConfig::TXT);
+    drawText(ChartConfig::ML + 400, iy + 8, ss.str(), 14, ChartConfig::TXT);
 
     ss.str("");
     ss << "初始磁头: " << head0;
-    drawText(ChartConfig::ML + 640, iy + 10, ss.str(), 16, ChartConfig::TXT);
+    drawText(ChartConfig::ML + 560, iy + 8, ss.str(), 14, ChartConfig::TXT);
 
-    drawText(W_WIDTH - 260, W_HEIGHT - 25, "按 ESC 返回上级菜单", 14, ChartConfig::TXT);
+    drawText(W_WIDTH - 250, W_HEIGHT - 18, "按 ESC 返回上级菜单", 13, ChartConfig::TXT);
 }
 
 // ================================================================
