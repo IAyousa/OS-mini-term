@@ -279,19 +279,23 @@ void deviceManagerSubMenu() {
         // ---- 状态表格 ----
         drawSystemTable();
 
-        // ---- 上次结果信息 ----
-        drawText(30, 320, g_sys.lastMessage, 15,
+        // ---- 上次结果信息（动态定位，避免和系统表格重叠） ----
+        int msgY = 90 + 28 + g_sys.processCount * 28 + 5 + 16 + 15;
+        if (msgY < 320) msgY = 320;
+        drawText(30, msgY, g_sys.lastMessage, 15,
                  g_sys.lastRequestGranted ? RGB(0, 130, 0) : RGB(200, 50, 50));
 
         // ---- 操作提示 ----
-        drawText(30, 360, "操作步骤：", 16, RGB(80, 80, 80));
-        drawText(30, 385, "① 按数字键 0~" + std::to_string(g_sys.processCount - 1) +
+        int hintY = msgY + 30;
+        drawText(30, hintY, "操作步骤：", 16, RGB(80, 80, 80));
+        drawText(30, hintY + 25, "① 按数字键 0~" + std::to_string(g_sys.processCount - 1) +
                           " 选择请求资源的进程", 15, RGB(100, 100, 100));
-        drawText(30, 410, "② 依次输入各资源请求值（回车确认）", 15, RGB(100, 100, 100));
-        drawText(30, 435, "③ 系统自动检查并展示分配结果", 15, RGB(100, 100, 100));
+        drawText(30, hintY + 50, "② 依次输入各资源请求值（回车确认）", 15, RGB(100, 100, 100));
+        drawText(30, hintY + 75, "③ 系统自动检查并展示分配结果", 15, RGB(100, 100, 100));
 
-        drawText(30, 470, "按 R 重置系统   |   按 0~4 选择进程   |   按 ESC 返回", 14, RGB(140, 140, 140));
-
+        drawText(30, hintY + 110, "按 R 重置系统   |   按 0~" +
+                 std::to_string(g_sys.processCount - 1) + " 选择进程   |   按 ESC 返回",
+                 14, RGB(140, 140, 140));
         // ---- 等待用户按键 ----
         int key = waitForKey();
 
@@ -308,14 +312,23 @@ void deviceManagerSubMenu() {
         int processIdx = key - '0';
         if (processIdx < 0 || processIdx >= g_sys.processCount) continue;
 
-        // 显示选中提示
+        // 显示选中提示（先清除旧文字背景，避免透明模式残留）
+        setfillcolor(WHITE);
+        setlinecolor(WHITE);
+        fillrectangle(20, msgY - 2, 700, msgY + 20);
         g_sys.lastMessage = "已选择进程 P" + std::to_string(processIdx) +
                             "，请在下方输入各资源请求值 (上限为 Need 和 Available 的较小值)";
-        drawText(30, 320, g_sys.lastMessage, 15, RGB(0, 100, 200));
+        drawText(30, msgY, g_sys.lastMessage, 15, RGB(0, 100, 200));
+
+        // 清除底部提示区域，为输入区腾出空间
+        setfillcolor(WHITE);
+        setlinecolor(WHITE);
+        fillrectangle(20, msgY + 25, W_WIDTH - 20, W_HEIGHT - 10);
+        int inputY = msgY + 40;
 
         // ---- 输入请求 ----
         std::vector<int> request;
-        bool completed = inputRequestVector(30, 500, processIdx, request);
+        bool completed = inputRequestVector(30, inputY + 30, processIdx, request);
         if (!completed) {
             g_sys.lastMessage = "已取消请求";
             continue;
