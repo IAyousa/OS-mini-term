@@ -24,9 +24,14 @@ struct PCB {
 //  2. 生产者 - 消费者步进状态记录
 // ====================================================================
 struct ProdConsStep {
-    std::string actionDesc;       // 事件描述 ("生产者生产了一个产品", "缓冲池满...", "消费者取出了一个产品"等)
-    int productCount = 0;         // 当前产品总数
-    std::vector<std::string> pool; // 缓冲池状态可视化：保存如 "Product", "[Empty]" 的字符串
+    std::string actor;              // "生产者" / "消费者" / "系统"
+    std::string operation;          // "P(empty)" / "V(empty)" / "P(full)" / "V(full)" / "P(mutex)" / "V(mutex)" / "生产" / "消费" / "阻塞"
+    std::string detail;             // 详细描述
+    int productCount = 0;           // 当前产品总数
+    int semFull = 0;                // full 信号量值
+    int semEmpty = 0;               // empty 信号量值
+    int semMutex = 1;               // mutex 信号量值
+    std::vector<std::string> pool;  // 缓冲池状态
 };
 
 // ====================================================================
@@ -56,7 +61,7 @@ public:
     // 按时间片分配 CPU，一个时间片后，运行进程已用CPU时间+1，优先级减1，重新排队
     static std::vector<std::vector<PCB>> runDynamicPriority(std::vector<PCB> processes, int timeSlice = 1);
 
-    // --- 生产者-消费者模拟 (步进式) ---
-    // 模拟产生包含生产者和消费者行为的步进历史轨迹（方便图形化步进演示）
-    static std::vector<ProdConsStep> generateProdConsHistory(int stepCount = 20, int initCount = 5, int maxCapacity = 20);
+    // --- 生产者-消费者模拟 (多线程 + 真实信号量) ---
+    // 使用 Windows 线程 + 信号量对象实现真正的并发 PV 操作
+    static std::vector<ProdConsStep> startProdConsThreads(int maxStep, int initCount, int maxCapacity);
 };

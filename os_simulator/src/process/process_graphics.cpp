@@ -232,40 +232,64 @@ static void drawProdConsStep(const std::vector<ProdConsStep>& history, int stepI
     const auto& step = history[stepIdx];
 
     // 步骤计数器
-    std::string stepStr = "步骤: " + std::to_string(stepIdx) + " / " + std::to_string((int)history.size() - 1);
-    drawText(40, 56, stepStr, 15, RGB(120, 120, 120));
+    std::string stepStr = "步骤: " + std::to_string(stepIdx + 1) + " / " + std::to_string((int)history.size());
+    drawText(40, 50, stepStr, 15, RGB(120, 120, 120));
+
+    // 操作者标识
+    COLORREF actorColor = (step.actor == "生产者") ? RGB(60, 120, 200) :
+                          (step.actor == "消费者") ? RGB(200, 120, 60) : RGB(120, 120, 120);
+    std::string actorLabel = step.actor + " → " + step.operation;
+    drawText(40, 74, actorLabel, 18, actorColor);
 
     // 事件描述横幅
-    bool isBlock = (step.actionDesc.find("阻塞") != std::string::npos ||
-                    step.actionDesc.find("满") != std::string::npos  ||
-                    step.actionDesc.find("空") != std::string::npos);
+    bool isBlock = (step.detail.find("阻塞") != std::string::npos);
     COLORREF bannerBg = isBlock ? RGB(255, 232, 232) : RGB(232, 255, 232);
     COLORREF bannerBd = isBlock ? RGB(200, 80, 80)  : RGB(80, 180, 80);
     COLORREF bannerTc = isBlock ? RGB(170, 30, 30)  : RGB(30, 140, 30);
 
     setfillcolor(bannerBg); setlinecolor(bannerBd);
-    fillrectangle(40, 82, W_WIDTH - 40, 120);
-    rectangle(40, 82, W_WIDTH - 40, 120);
-    drawText(60, 94, step.actionDesc, 16, bannerTc);
+    fillrectangle(40, 100, W_WIDTH - 40, 132);
+    rectangle(40, 100, W_WIDTH - 40, 132);
+    drawText(60, 108, step.detail, 15, bannerTc);
 
-    // 信号量状态栏
-    int cap = step.pool.size();
-    int cnt = step.productCount;
-    std::stringstream ss;
-    ss << "信号量 full=" << cnt << "  |  empty=" << (cap - cnt) << "  |  缓冲池容量=" << cap;
-    int sw = textWidth(ss.str(), 16);
-    drawText((W_WIDTH - sw) / 2, 132, ss.str(), 16, RGB(50, 50, 130));
+    // 信号量状态面板
+    int sY = 150;
+    int boxW = 160, boxH = 42, gap = 20;
+    int startX = (W_WIDTH - (boxW * 3 + gap * 2)) / 2;
+
+    struct SemItem { const char* name; int val; COLORREF color; };
+    SemItem sems[] = {
+        {"full",  step.semFull,  RGB(60, 140, 60)},
+        {"empty", step.semEmpty, RGB(140, 100, 60)},
+        {"mutex", step.semMutex, RGB(180, 60, 60)},
+    };
+
+    for (int i = 0; i < 3; ++i) {
+        int bx = startX + i * (boxW + gap);
+        setfillcolor(RGB(248, 250, 255));
+        setlinecolor(RGB(180, 200, 220));
+        fillrectangle(bx, sY, bx + boxW, sY + boxH);
+        rectangle(bx, sY, bx + boxW, sY + boxH);
+
+        drawText(bx + 10, sY + 4, sems[i].name, 16, RGB(80, 80, 80));
+        settextstyle(22, 0, utf8ToGbk("Arial").c_str());
+        settextcolor(sems[i].color);
+        std::string valStr = std::to_string(sems[i].val);
+        outtextxy(bx + boxW - 10 - textWidth(valStr, 22), sY + 9, utf8ToGbk(valStr).c_str());
+    }
 
     // 缓冲池图形
-    int poolX = 40, poolY = 168;
-    int cW = 60, cH = 46;
-    int maxPerRow = (W_WIDTH - 80) / (cW + 8);
+    int poolY = 210;
+    int poolX = 40;
+    int cW = 56, cH = 42;
+    int maxPerRow = (W_WIDTH - 80) / (cW + 6);
+    int cap = step.pool.size();
 
     for (int i = 0; i < cap; ++i) {
         int row = i / maxPerRow;
         int col = i % maxPerRow;
-        int cx = poolX + col * (cW + 8);
-        int cy = poolY + row * (cH + 8);
+        int cx = poolX + col * (cW + 6);
+        int cy = poolY + row * (cH + 6);
 
         bool hasProd = (step.pool[i] != "[Empty]");
         setfillcolor(hasProd ? RGB(170, 225, 170) : RGB(248, 248, 248));
@@ -274,28 +298,29 @@ static void drawProdConsStep(const std::vector<ProdConsStep>& history, int stepI
         fillrectangle(cx, cy, cx + cW, cy + cH);
 
         std::string label = hasProd ? "P" : "";
-        int lw = textWidth(label, 18);
-        drawText(cx + (cW - lw) / 2, cy + 12, label, 18, hasProd ? RGB(30, 110, 30) : RGB(210, 210, 210));
+        int lw = textWidth(label, 16);
+        drawText(cx + (cW - lw) / 2, cy + 10, label, 16, hasProd ? RGB(30, 110, 30) : RGB(210, 210, 210));
 
         std::string idx = std::to_string(i);
         drawText(cx + (cW - textWidth(idx, 11)) / 2, cy + cH - 14, idx, 11, RGB(160, 160, 160));
     }
 
     // 图例 + 提示
+    int ly = std::max(poolY + ((cap + maxPerRow - 1) / maxPerRow) * (cH + 6) + 10, W_HEIGHT - 100);
     setlinecolor(RGB(200, 200, 200)); setlinestyle(PS_SOLID, 1);
-    line(40, W_HEIGHT - 96, W_WIDTH - 40, W_HEIGHT - 96);
+    line(40, ly, W_WIDTH - 40, ly);
 
     setfillcolor(RGB(170, 225, 170)); setlinecolor(RGB(70, 155, 70));
-    fillrectangle(40, W_HEIGHT - 82, 60, W_HEIGHT - 62);
-    drawText(68, W_HEIGHT - 78, "= 已有商品", 13, BLACK);
+    fillrectangle(40, ly + 12, 60, ly + 28);
+    drawText(68, ly + 12, "= 已有商品", 13, BLACK);
 
     setfillcolor(RGB(248, 248, 248)); setlinecolor(RGB(200, 200, 200));
-    fillrectangle(190, W_HEIGHT - 82, 210, W_HEIGHT - 62);
-    drawText(218, W_HEIGHT - 78, "= 空闲槽位", 13, BLACK);
+    fillrectangle(180, ly + 12, 200, ly + 28);
+    drawText(208, ly + 12, "= 空闲槽位", 13, BLACK);
 
     std::string tip = "按 【←/→】 或 【A/D】 步进/回退  |  【Enter】 自动演示  |  【ESC】 返回";
     int tipW = textWidth(tip, 15);
-    drawText((W_WIDTH - tipW) / 2, W_HEIGHT - 44, tip, 15, RGB(140, 140, 140));
+    drawText((W_WIDTH - tipW) / 2, ly + 45, tip, 15, RGB(140, 140, 140));
 }
 
 // ============================================================
@@ -397,7 +422,7 @@ void processManagerSubMenu() {
         else if (key == VK_DOWN) selected = (selected + 1) % MENU_COUNT;
         else if (key == VK_RETURN || (key >= '0' && key <= '5')) {
             if (selected == 0) {
-                auto hist = ProcessManager::generateProdConsHistory(25, 5, 20);
+                auto hist = ProcessManager::startProdConsThreads(30, 1, 3);
                 int total = hist.size();
                 runStepView(total, [&](int s) { drawProdConsStep(hist, s); });
             } else if (selected == 1) {

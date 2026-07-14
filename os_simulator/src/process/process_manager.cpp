@@ -4,6 +4,7 @@
 #include <queue>
 #include <sstream>
 #include <iomanip>
+#include <windows.h>
 
 // ====================================================================
 //  1. 调度辅助计算函数
@@ -291,53 +292,159 @@ std::vector<std::vector<PCB>> ProcessManager::runDynamicPriority(std::vector<PCB
 }
 
 // ====================================================================
-//  6. 生产者-消费者历史序列生成器
+//  6. 生产者-消费者（多线程 + 真实信号量）
 // ====================================================================
-std::vector<ProdConsStep> ProcessManager::generateProdConsHistory(int stepCount, int initCount, int maxCapacity) {
+
+// 线程间共享状态
+struct ProdConsShared {
+    HANDLE hFull;                       // full 信号量
+    HANDLE hEmpty;                      // empty 信号量
+    CRITICAL_SECTION cs;                // 互斥锁（保护缓冲池）
+    std::vector<std::string> pool;
+    int maxCap;
+    int curCount;                       // 实际产品数
+    int mutexVal;                       // mutex 值（1=未锁, 0=已锁）
+    volatile LONG totalOps;
+    int maxSteps;                       // 最大操作数（超了线程退出）
+    volatile bool running;              // 是否继续运行
     std::vector<ProdConsStep> history;
-    int currentCount = initCount;
+    CRITICAL_SECTION histCs;            // 保护 history 的锁
+};
 
-    // 初始化缓冲池
-    std::vector<std::string> currentPool(maxCapacity, "[Empty]");
-    for (int i = 0; i < currentCount; ++i) {
-        currentPool[i] = "Product";
+// 记录一步操作（线程安全）
+static void recordStep(ProdConsShared* sh, const std::string& actor,
+                       const std::string& op, const std::string& detail) {
+    EnterCriticalSection(&sh->histCs);
+    if (!sh->running || sh->totalOps >= sh->maxSteps) {
+        LeaveCriticalSection(&sh->histCs);
+        return;
     }
+    ProdConsStep s;
+    s.actor = actor; s.operation = op; s.detail = detail;
+    s.semFull = sh->curCount;
+    s.semEmpty = sh->maxCap - sh->curCount;
+    s.semMutex = sh->mutexVal;
+    s.productCount = sh->curCount;
+    s.pool = sh->pool;
+    sh->history.push_back(s);
+    InterlockedIncrement(&sh->totalOps);
+    LeaveCriticalSection(&sh->histCs);
+}
 
-    ProdConsStep initialStep;
-    initialStep.actionDesc = "初始化缓冲池，初始商品数量: " + std::to_string(currentCount);
-    initialStep.productCount = currentCount;
-    initialStep.pool = currentPool;
-    history.push_back(initialStep);
+DWORD WINAPI ProducerThread(LPVOID param) {
+    ProdConsShared* sh = (ProdConsShared*)param;
+    while (sh->running && sh->totalOps < sh->maxSteps) {
+        // P(empty)
+        DWORD dw = WaitForSingleObject(sh->hEmpty, 200);
+        if (dw != WAIT_OBJECT_0) continue;
+        if (!sh->running) { ReleaseSemaphore(sh->hEmpty, 1, NULL); break; }
+        recordStep(sh, "生产者", "P(empty)",
+                   "P(empty)：申请空缓冲区成功，empty--");
 
-    for (int i = 0; i < stepCount; ++i) {
-        ProdConsStep step;
-        // 随机：0 代表生产者生产，1 代表消费者消费
-        int r = rand() % 2;
+        // P(mutex)
+        sh->mutexVal--;
+        EnterCriticalSection(&sh->cs);
+        recordStep(sh, "生产者", "P(mutex)",
+                   "P(mutex)：进入临界区，mutex=0");
 
-        if (r == 0) {
-            // 生产者行为
-            if (currentCount >= maxCapacity) {
-                step.actionDesc = "生产了一个新产品，但缓冲池已满！进入阻塞等待...";
-            } else {
-                currentPool[currentCount] = "Product";
-                currentCount++;
-                step.actionDesc = "生产了一个新产品！成功存入缓冲池中";
-            }
-        } else {
-            // 消费者行为
-            if (currentCount <= 0) {
-                step.actionDesc = "尝试取出产品，但缓冲池已空！进入阻塞等待...";
-            } else {
-                currentCount--;
-                currentPool[currentCount] = "[Empty]";
-                step.actionDesc = "取出了一个产品！消费成功";
-            }
-        }
+        // 生产
+        sh->pool[sh->curCount] = "Product";
+        sh->curCount++;
+        recordStep(sh, "生产者", "生产",
+                   "生产一个产品，放入缓冲块[" + std::to_string(sh->curCount - 1) + "]");
 
-        step.productCount = currentCount;
-        step.pool = currentPool;
-        history.push_back(step);
+        // V(mutex)
+        LeaveCriticalSection(&sh->cs);
+        sh->mutexVal++;
+        recordStep(sh, "生产者", "V(mutex)",
+                   "V(mutex)：退出临界区，mutex=1");
+
+        // V(full)
+        ReleaseSemaphore(sh->hFull, 1, NULL);
+        recordStep(sh, "生产者", "V(full)",
+                   "V(full)：full++，可唤醒消费者");
     }
+    return 0;
+}
 
-    return history;
+DWORD WINAPI ConsumerThread(LPVOID param) {
+    ProdConsShared* sh = (ProdConsShared*)param;
+    while (sh->running && sh->totalOps < sh->maxSteps) {
+        // P(full)
+        DWORD dw = WaitForSingleObject(sh->hFull, 200);
+        if (dw != WAIT_OBJECT_0) continue;
+        if (!sh->running) { ReleaseSemaphore(sh->hFull, 1, NULL); break; }
+        recordStep(sh, "消费者", "P(full)",
+                   "P(full)：申请满缓冲区成功，full--");
+
+        // P(mutex)
+        sh->mutexVal--;
+        EnterCriticalSection(&sh->cs);
+        recordStep(sh, "消费者", "P(mutex)",
+                   "P(mutex)：进入临界区，mutex=0");
+
+        // 消费
+        sh->curCount--;
+        sh->pool[sh->curCount] = "[Empty]";
+        recordStep(sh, "消费者", "消费",
+                   "消费一个产品，清空缓冲块[" + std::to_string(sh->curCount) + "]");
+
+        // V(mutex)
+        LeaveCriticalSection(&sh->cs);
+        sh->mutexVal++;
+        recordStep(sh, "消费者", "V(mutex)",
+                   "V(mutex)：退出临界区，mutex=1");
+
+        // V(empty)
+        ReleaseSemaphore(sh->hEmpty, 1, NULL);
+        recordStep(sh, "消费者", "V(empty)",
+                   "V(empty)：empty++，可唤醒生产者");
+    }
+    return 0;
+}
+
+std::vector<ProdConsStep> ProcessManager::startProdConsThreads(int maxStep, int initCount, int maxCapacity) {
+    ProdConsShared sh;
+    sh.maxCap = maxCapacity;
+    sh.curCount = initCount;
+    sh.mutexVal = 1;
+    sh.maxSteps = maxStep;
+    sh.running = true;
+    sh.totalOps = 0;
+    sh.pool.assign(maxCapacity, "[Empty]");
+    for (int i = 0; i < initCount; ++i) sh.pool[i] = "Product";
+
+    // 创建 Windows 信号量
+    sh.hFull  = CreateSemaphore(NULL, initCount, maxCapacity, NULL);
+    sh.hEmpty = CreateSemaphore(NULL, maxCapacity - initCount, maxCapacity, NULL);
+    InitializeCriticalSection(&sh.cs);
+    InitializeCriticalSection(&sh.histCs);
+
+    // 初始状态（计入历史用于展示，但不计入步数限制）
+    recordStep(&sh, "系统", "初始化",
+               "缓冲池初始化，初始商品 " + std::to_string(initCount) +
+               " 个，空闲 " + std::to_string(maxCapacity - initCount) + " 个");
+    sh.totalOps = 0;
+
+    // 创建线程
+    DWORD tid1, tid2;
+    HANDLE hProd = CreateThread(NULL, 0, ProducerThread, &sh, 0, &tid1);
+    HANDLE hCons = CreateThread(NULL, 0, ConsumerThread, &sh, 0, &tid2);
+
+    // 等待达到步数上限（额外留 5 步缓冲，保证最后一个周期完整）
+    while (sh.totalOps < maxStep) Sleep(50);
+    Sleep(100);  // 等正在执行的周期完成
+
+    // 停止线程
+    sh.running = false;
+    WaitForSingleObject(hProd, 1000);
+    WaitForSingleObject(hCons, 1000);
+
+    // 清理
+    CloseHandle(hProd); CloseHandle(hCons);
+    CloseHandle(sh.hFull); CloseHandle(sh.hEmpty);
+    DeleteCriticalSection(&sh.cs);
+    DeleteCriticalSection(&sh.histCs);
+
+    return sh.history;
 }
