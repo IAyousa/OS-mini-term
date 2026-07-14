@@ -269,7 +269,9 @@ std::vector<std::vector<PCB>> ProcessManager::runDynamicPriority(std::vector<PCB
             p.status = 'F';
             p.finishTime = currentTime;
         } else {
-            p.priority -= 1; // 优先级降低一级
+            if(p.priority > 0){
+                p.priority -= 1; // 优先级降低一级
+            }
             p.status = 'W';  // 重新放回就绪队列
         }
 
