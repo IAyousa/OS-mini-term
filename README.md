@@ -86,6 +86,7 @@ os_simulator/src/main.exe
 ```
 OS-mini-term/
 ├── Makefile                          # 编译配置（入口）
+├── README.md
 ├── os_simulator/
 │   ├── include/                      # 头文件
 │   │   ├── graphics_utils.h          # EasyX 通用工具（drawText, textWidth, clearWhite...）
@@ -94,12 +95,11 @@ OS-mini-term/
 │   │   ├── memory_manager.h          # 存储管理数据结构
 │   │   └── process_manager.h         # 进程管理数据结构
 │   ├── src/
-│   │   ├── main.cpp                  # 入口 + 主菜单
-│   │   ├── device/                   # 设备管理
-│   │   ├── file/                     # 文件管理（磁盘调度）
-│   │   ├── memory/                   # 存储管理
-│   │   └── process/                  # 进程管理
-│   └── README.md
+│       ├── main.cpp                  # 入口 + 主菜单
+│       ├── device/                   # 设备管理
+│       ├── file/                     # 文件管理（磁盘调度）
+│       ├── memory/                   # 存储管理
+│       └── process/                  # 进程管理
 ```
 
 ## 开发
